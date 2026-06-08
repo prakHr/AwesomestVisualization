@@ -1,14 +1,12 @@
 import pandas as pd
 import numpy as np
 from pycirclize import Circos
+from pycirclize.utils import ColorCycler
 
 import random
 
 def create_awesome_visualization(df):
-    from pycirclize import Circos
-    from pycirclize.utils import ColorCycler
-    import numpy as np
-
+    
     np.random.seed(0)
     ColorCycler.set_cmap("tab10")
     df = df.select_dtypes(include=['number'])
