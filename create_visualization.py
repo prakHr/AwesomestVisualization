@@ -1,76 +1,178 @@
 import pandas as pd
 import numpy as np
 from pycirclize import Circos
-from pycirclize.utils import ColorCycler
 
 import random
+import pandas as pd
+import numpy as np
+from pycirclize import Circos
+from pycirclize.utils import ColorCycler
+
 
 def create_awesome_visualization(df):
-    
-    np.random.seed(0)
-    ColorCycler.set_cmap("tab10")
-    df = df.select_dtypes(include=['number'])
-    old_sectors = df.to_dict(orient='records')
-    sectors = {}
-    for sec_dict in old_sectors:
-        for k,v in sec_dict.items():
-            sectors[k]=sectors.get(k,0)+v
-    # print(sectors)
-    L = ["red","blue","green"]
-    sector_colors = {k:random.choices(L, k=1)[0] for k,v in sectors.items()}
-    circos = Circos(sectors, space=10, start=90, end=360, endspace=False)
+    # Keep only numeric columns
+    df = df.select_dtypes(include=["number"])
+
+    if df.empty:
+        raise ValueError("DataFrame contains no numeric columns")
+
+    # Sector sizes = column sums
+    sectors = df.sum(axis=0).to_dict()
+
+    ColorCycler.set_cmap("tab20")
+
+    sector_names = list(sectors.keys())
+    sector_colors = {
+        sector: ColorCycler(i)
+        for i, sector in enumerate(sector_names)
+    }
+
+    circos = Circos(
+        sectors,
+        space=max(2, 360 / (len(sectors) * 8)),
+        start=90,
+        end=360,
+        endspace=False,
+    )
+
+    max_value = df.max().max()
 
     for sector in circos.sectors:
+        col_name = sector.name
+
+        # Values from dataframe column
+        values = df[col_name].dropna().values
+
+        if len(values) == 0:
+            continue
+
+        x = np.arange(len(values))
+
+        # -------------------------
         # Outer Track
+        # -------------------------
         outer_track = sector.add_track((95, 100))
-        outer_track.text(sector.name, color="white")
-        outer_track.axis(fc=sector_colors[sector.name])
-        outer_track.xticks_by_interval(interval=10, label_orientation="vertical")
+        outer_track.axis(fc=sector_colors[col_name])
+        outer_track.text(col_name, color="white")
+
+        tick_interval = max(1, len(values) // 5)
+        outer_track.xticks_by_interval(
+            tick_interval,
+            label_orientation="vertical"
+        )
+
+        # -------------------------
         # Rectangle Track
+        # -------------------------
         rect_track = sector.add_track((90, 95))
-        rect_size = 10
-        for i in range(int(rect_track.size / rect_size)):
-            x1, x2 = i * rect_size, i * rect_size + rect_size
-            rect_track.rect(x1, x2, ec="black", lw=0.5, color=ColorCycler())
-            rect_track.text(str(i + 1), (x1 + x2) / 2, size=8, color="white")
-        # Generate random x, y plot data
-        x = np.arange(1, int(sector.size), 2)
-        y = np.random.randint(0, 10, len(x))
+
+        rect_size = max(1, int(sector.size / max(5, len(values))))
+
+        for i in range(len(values)):
+            x1 = i * rect_size
+            x2 = min((i + 1) * rect_size, sector.size)
+
+            rect_track.rect(
+                x1,
+                x2,
+                ec="black",
+                lw=0.5,
+                color=ColorCycler(i)
+            )
+
+            rect_track.text(
+                str(i + 1),
+                (x1 + x2) / 2,
+                size=6,
+                color="white"
+            )
+
+        # -------------------------
         # Line Track
+        # -------------------------
         line_track = sector.add_track((80, 90), r_pad_ratio=0.1)
         line_track.axis()
-        line_track.line(x, y, color="blue")
-        # Scatter Track
-        scatter_track = sector.add_track((70, 80), r_pad_ratio=0.1)
-        scatter_track.axis()
-        scatter_track.bar(x, y, width=0.8, color="orange")
+
+        line_track.line(
+            x,
+            values,
+            color="blue"
+        )
+
+        # -------------------------
         # Bar Track
-        bar_track = sector.add_track((60, 70), r_pad_ratio=0.1)
+        # -------------------------
+        bar_track = sector.add_track((70, 80), r_pad_ratio=0.1)
         bar_track.axis()
-        bar_track.scatter(x, y, color="green", s=3)
+
+        bar_track.bar(
+            x,
+            values,
+            width=0.8,
+            color="orange"
+        )
+
+        # -------------------------
+        # Scatter Track
+        # -------------------------
+        scatter_track = sector.add_track((60, 70), r_pad_ratio=0.1)
+        scatter_track.axis()
+
+        scatter_track.scatter(
+            x,
+            values,
+            color="green",
+            s=10
+        )
+
+        # -------------------------
         # Fill Track
+        # -------------------------
         fill_track = sector.add_track((50, 60), r_pad_ratio=0.1)
         fill_track.axis()
-        fill_track.fill_between(x, y, y2=0, fc="red", ec="black", lw=0.5, alpha=0.5)
-        # Line + Bar + Scatter Track
-        line_bar_scatter_track = sector.add_track((40, 50), r_pad_ratio=0.1)
-        line_bar_scatter_track.axis()
-        line_bar_scatter_track.line(x, y, color="blue")
-        line_bar_scatter_track.bar(x, y, width=0.8, color="orange")
-        line_bar_scatter_track.scatter(x, y, color="green", s=3)
 
-    # Plot text description
-    text_common_kws = dict(ha="left", va="center", size=8)
-    circos.text(" 01. Outer Track", r=97.5, color="black", **text_common_kws)
-    circos.text(" 02. Rectangle Track", r=92.5, color="grey", **text_common_kws)
-    circos.text(" 03. Line Track", r=85, color="blue", **text_common_kws)
-    circos.text(" 04. Bar Track", r=75, color="orange", **text_common_kws)
-    circos.text(" 05. Scatter Track", r=65, color="green", **text_common_kws)
-    circos.text(" 06. Fill between Track", r=55, color="red", **text_common_kws)
-    circos.text(" 07. Line + Bar + Scatter Track", r=45, color="purple", **text_common_kws)
+        fill_track.fill_between(
+            x,
+            values,
+            y2=0,
+            fc="red",
+            ec="black",
+            lw=0.5,
+            alpha=0.5,
+        )
 
-    fig = circos.plotfig()
-    return fig
+        # -------------------------
+        # Combined Track
+        # -------------------------
+        combo_track = sector.add_track((40, 50), r_pad_ratio=0.1)
+        combo_track.axis()
+
+        combo_track.line(x, values, color="blue")
+        combo_track.bar(x, values, width=0.8, color="orange")
+        combo_track.scatter(x, values, color="green", s=10)
+
+    # Dynamic legend labels
+    legend_items = [
+        ("Outer Track", 97.5, "black"),
+        ("Rectangle Track", 92.5, "grey"),
+        ("Line Track", 85, "blue"),
+        ("Bar Track", 75, "orange"),
+        ("Scatter Track", 65, "green"),
+        ("Fill Track", 55, "red"),
+        ("Combined Track", 45, "purple"),
+    ]
+
+    for label, radius, color in legend_items:
+        circos.text(
+            f" {label}",
+            r=radius,
+            color=color,
+            ha="left",
+            va="center",
+            size=8,
+        )
+
+    return circos.plotfig()
 
 def save_figure(fig, output_file_path):
     fig.savefig(output_file_path, dpi=300, bbox_inches="tight")
